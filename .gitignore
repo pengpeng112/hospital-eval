@@ -1,0 +1,49 @@
+# ===== 凭据与密钥：严禁提交 =====
+.env
+.env.*
+!.env.example
+deploy/.env
+deploy/.env.*
+!deploy/.env.example
+secrets/
+*.pem
+*.key
+*.p12
+*.jks
+id_rsa*
+id_ed25519*
+# 注意：不要使用 *password* / *secret* 这类宽泛规则，Windows 下不区分大小写，会误伤 ChangePasswordReq.java 等源码
+
+# ===== 患者数据与运行数据：严禁提交（含姓名/住院号等敏感信息）=====
+*.csv
+exports/
+uploads/
+deploy/data/
+hospital-eval-server/uploads/
+migration/.tmp/
+
+# ===== Office 临时文件 / 系统文件 =====
+~$*.xlsx
+~$*.docx
+.DS_Store
+Thumbs.db
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# ===== Java / Maven =====
+target/
+*.war
+.mvn/timing.properties
+.idea/
+*.iml
+
+# ===== Node / Vue =====
+node_modules/
+hospital-eval-web/dist/
+*.log
