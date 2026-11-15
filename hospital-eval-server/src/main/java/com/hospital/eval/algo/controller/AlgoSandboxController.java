@@ -2,6 +2,8 @@ package com.hospital.eval.algo.controller;
 
 import cn.dev33.satoken.annotation.SaCheckRole;
 import com.hospital.eval.algo.datasource.OracleQueryService;
+import com.hospital.eval.algo.mapper.MetricSqlMapper;
+import com.hospital.eval.common.BizException;
 import com.hospital.eval.algo.dto.SandboxDtos.TrialReq;
 import com.hospital.eval.algo.dto.SandboxDtos.ValidateReq;
 import com.hospital.eval.algo.sandbox.ReadOnlySqlValidator;
@@ -33,6 +35,7 @@ public class AlgoSandboxController {
     private final OracleQueryService oracleQueryService;
     private final ReadOnlySqlValidator validator;
     private final OperLogService operLogService;
+    private final MetricSqlMapper sqlMapper;
 
     @GetMapping("/datasources")
     public R<List<Map<String, Object>>> datasources() {
@@ -56,14 +59,41 @@ public class AlgoSandboxController {
     @PostMapping("/sql/trial")
     @SaCheckRole("ADMIN")
     public R<Map<String, Object>> trial(@Valid @RequestBody TrialReq req) {
-        Map<String, Object> resp = oracleQueryService.trial(req.sqlText, req.datasourceKey);
+        Map<String, Object> resp;
+        try {
+            resp = oracleQueryService.trial(req.sqlText, req.datasourceKey);
+        } catch (BizException e) {
+            // TASK-09 步骤 6：试跑失败回写 last_verify_status=2
+            if (req.sqlId != null) {
+                markVerifyStatus(req.sqlId, 2);
+            }
+            throw e;
+        }
+        // TASK-09 步骤 6：试跑成功回写 last_verify_status=1
+        if (req.sqlId != null) {
+            markVerifyStatus(req.sqlId, 1);
+        }
         String sqlPrefix = req.sqlText.length() > 200 ? req.sqlText.substring(0, 200) : req.sqlText;
         Map<String, Object> detail = new LinkedHashMap<>();
         detail.put("datasourceKey", req.datasourceKey);
         detail.put("sqlPrefix", sqlPrefix);
         detail.put("rowCount", resp.get("rowCount"));
         detail.put("elapsedMs", resp.get("elapsedMs"));
+        if (req.sqlId != null) {
+            detail.put("sqlId", req.sqlId);
+        }
         operLogService.log("ALGO", "TRIAL", "datasource", req.datasourceKey, detail);
         return R.ok(resp);
+    }
+
+    private void markVerifyStatus(long sqlId, int status) {
+        try {
+            var upd = new com.hospital.eval.algo.entity.MetricSql();
+            upd.setId(sqlId);
+            upd.setLastVerifyStatus(status);
+            sqlMapper.updateById(upd);
+        } catch (Exception e) {
+            // 回写失败不影响试跑结果本身
+        }
     }
 }
