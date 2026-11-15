@@ -35,3 +35,16 @@ eval:
   init-user-password: ${EVAL_INIT_USER_PASSWORD:}
   jwt-secret: ${JWT_SECRET:}
   upload-dir: ${EVAL_UPLOAD_DIR:/data/uploads}
+  oracle:
+    his:
+      url: ${HIS_RO_JDBC_URL:}
+      username: ${HIS_RO_USERNAME:}
+      password: ${HIS_RO_PASSWORD:}
+    ods:
+      url: ${ODS_RO_JDBC_URL:}
+      username: ${ODS_RO_USERNAME:}
+      password: ${ODS_RO_PASSWORD:}
+  engine:
+    query-timeout-seconds: 600
+    fetch-size: 2000
+    threads: 3
