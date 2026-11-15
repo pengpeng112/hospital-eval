@@ -49,8 +49,8 @@
 
 ## 三、数据库连接与安全红线（跨仓库通用）
 
-1. **业务源库绝对只读**：连接院内 Oracle 11g（`HIS 10.10.10.15` / `ODS 10.10.8.216`）仅允许单条 `SELECT` 或只读 CTE，严禁任何 DML / DDL / PLSQL / 存储过程 / 锁表语句，**业务源库写入数量永远为 `0`**；所有落库、填报与审核留痕一律写入本系统自有的 PostgreSQL/MySQL 评审专库。
-2. **凭据零暴露与受控连库通道**：严禁在代码、前端、日志或对话中硬编码、读取或打印私钥与密码文件。如需查各业务系统表结构或执行只读探查 SQL，统一复用全局技能 `C:\Users\Administrator\.zcode\skills\sjzc\SKILL.md` 及 `F:\python\数据资产\AGENTS.md` 中的「数据查询统一入口」（`data-asset-83` 容器受控只读通道）。
+1. **业务源库绝对只读**：连接院内 Oracle 11g（标准只读源连接地址规范：`ODS_RO` 为 `jdbc:oracle:thin:@//10.10.8.216:1521/orcl`，`HIS_RO` 为 `jdbc:oracle:thin:@//10.10.10.15:1521/his`；真实账号密码仅存于本地已忽略的 `deploy/.env` 及生产 `deploy/.env.prod`）仅允许单条 `SELECT` 或只读 CTE，严禁任何 DML / DDL / PLSQL / 存储过程 / 锁表语句，**业务源库写入数量永远为 `0`**；所有落库、填报与审核留痕一律写入本系统自有的 PostgreSQL/MySQL 评审专库。
+2. **凭据零暴露与受控连库通道**：严禁在任何 Git 跟踪文档、代码、前端、日志、回执或对话中硬编码、写入、读取或打印明文账号、密码、私钥或密码文件。院内 Oracle 11g 监听启用客户端 IP 白名单校验，本机 Windows 直连未放行时会报 `SQLRecoverableException (vendorCode=17002)`（生产 `10.10.8.75` 走内网白名单直连；本机开发如需联调真实 Oracle，可由用户显式开启 `02_医院等级评审系统分步实施方案.md` 记载的 `data-asset-83` SSH 端口转发或将本机内网 IP 加入白名单，冒烟脚本在监听未放行时按 `SKIP` 处理）。如需查各业务系统表结构或执行只读探查 SQL，统一复用全局技能 `C:\Users\Administrator\.zcode\skills\sjzc\SKILL.md` 及 `F:\python\数据资产\AGENTS.md` 中的「数据查询统一入口」（`data-asset-83` 容器受控只读通道）。
 3. **Oracle 11g 语法与大表保护**：分页必须用 `ROWNUM`（禁用 `LIMIT` 和 `FETCH FIRST`）；查询 `HIS.INP_BILL_DETAIL`（2.19 亿行）、`LIS.LAB_RESULT`（9631 万行）及 `MTL`/`JHEMR` CLOB 文书表时，必须先按就诊主键或单月/单年左闭右开时间窗收敛范围，后台跑批对源库并发连接数严格限制 `<= 3`。
 4. **目标部署服务器（`10.10.8.75` · `ai病历质控`）共存保护红线**：本系统生产部署宿主机为 **`10.10.8.75`**（业务标识：`ai病历质控`，登录用户 `root`，推荐本机 SSH 免密别名 `hospital-eval-75`），所有文件与数据卷必须严格隔离存放在 **`/opt/hospital-eval/`** 下，采用高段隔离端口（`18080/48080/15432/16379/18012`）。**严禁在任何文档、代码或日志中写入明文密码**；部署前必须先只读探查既有端口与容器，严禁停用、重启、清理或覆盖宿主机原有的“AI 病历质控”业务服务。
 5. **Windows 本机开发环境保护红线**：本机默认全局 `JAVA_HOME` 为 `AdoptOpenJDK 1.8.0_292`（供医院既有工具使用）。**严禁修改系统全局 `JAVA_HOME` 或系统 `PATH`**；后端 Spring Boot 3.2（JDK 17）编译与单元测试统一通过 Docker 容器（`maven:3.9-eclipse-temurin-17`）或在当前子进程临时局部环境运行。

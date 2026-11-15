@@ -87,7 +87,7 @@ powershell -ExecutionPolicy Bypass -File scripts/smoke/TASK_05.ps1
 5. `/api/scope/list?metricId=<上面的id>` 返回 ≥ 1 条；
 6. `/api/scope/func-dept-summary` 返回 ≥ 1 条；
 7. 导出 xlsx 文件大小 > 5KB（保存到 `$env:TEMP`，**不要**存到项目目录），再原样导入 → `errors` 为空；
-8. 若 `HIS_RO` 已配置：调用 `sync-dept-codes` 打印 `updated` 与 `unmatchedNames` 数量；否则 `SKIP`；
+8. 若 `HIS_RO` 已配置且 `/api/algo/datasources/HIS_RO/ping` 返回 `ok == true`：调用 `sync-dept-codes` 打印 `updated` 与 `unmatchedNames` 数量；否则打印 `SKIP`（含未配置或监听白名单未放行原因）；
 9. 打印 `SMOKE TASK_08 ALL PASS`。
 
 ## 7. 验收命令

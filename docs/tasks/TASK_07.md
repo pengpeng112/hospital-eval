@@ -120,7 +120,7 @@ powershell -ExecutionPolicy Bypass -File scripts/smoke/TASK_06.ps1     # 无 FAI
 
 ### 步骤 8：冒烟脚本 `scripts/smoke/TASK_07.ps1`
 1. 调用 `/api/batch/run` 不带 `metricIds`/`scopeIds` → 返回 `code == 400`；
-2. 若 Oracle 未配置 → 打印 `SKIP` 并结束；
+2. 若 Oracle 未配置，或调用 `/api/algo/datasources/ODS_RO/ping` 返回 `ok == false`（网络/Oracle 监听白名单未放行，非 `ORA-01017`）→ 打印 `SKIP`（含原因）并结束；
 3. 从 PostgreSQL 选 **3 个**测试实例（用 `docker exec eval-postgres psql` 查询）：
    - A：呼吸专业中有 `NUM_SUM` 与 `DEN_SUM` 的实例（单科室，`datasource_key='ODS_RO'`）；
    - B：康复专业中有 `NUM_DTL` 与 `DEN_DTL` 的实例；

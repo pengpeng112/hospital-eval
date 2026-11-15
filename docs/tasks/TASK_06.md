@@ -64,7 +64,7 @@ powershell -ExecutionPolicy Bypass -File scripts/smoke/TASK_05.ps1     # 仍然�
 - 提供 `Map<String, JdbcTemplate> oracleTemplates`（key=`HIS_RO`/`ODS_RO`），每个 `JdbcTemplate` 设置 `queryTimeout = eval.engine.query-timeout-seconds`（默认 600）、`fetchSize = 2000`。
 
 ### 步骤 4：`OracleQueryService` 与 `AlgoSandboxController`
-- `ping(key)`：执行 `SELECT 1 FROM DUAL`，返回 `{ok, elapsedMs, message}`；异常时 `ok=false`，`message` 只保留异常类名和 ORA 错误号（如 `ORA-01017`），不要原样返回可能含账号的异常信息。
+- `ping(key)`：执行 `SELECT 1 FROM DUAL`，返回 `{ok, elapsedMs, message}`；异常时 `ok=false`，`message` 只保留异常简短类名和 `ORA-xxxxx` 错误号（如 `ORA-01017`；若异常文本不含 `ORA-` 但 `SQLException.getErrorCode() != 0`，追加 `(vendorCode=xxxx)`，例如 `SQLRecoverableException (vendorCode=17002)`），不要原样返回可能含账号或连接串的异常详情。
 - `trial(sqlText, key)`：先 `validate`，不合法直接返回 400 + 错误列表；合法则执行 `SELECT * FROM (<executableSql>) WHERE ROWNUM <= 20`，`queryTimeout` 固定 120 秒；返回 `{columns, rows, rowCount, elapsedMs}`；CLOB 列只取前 200 字符，日期列格式化为 `yyyy-MM-dd HH:mm:ss`。
 - 接口路径与入参严格按 04 §12.2；`trial` 与 `ping` 仅 `ADMIN` 角色可调用；`validate` 与 `datasources` 登录即可。
 - 每次 `trial` 写 `sys_oper_log`（module=`ALGO`，action=`TRIAL`，detail 只记数据源、SQL 前 200 字、行数、耗时）。
@@ -94,9 +94,9 @@ powershell -ExecutionPolicy Bypass -File scripts/smoke/TASK_05.ps1     # 仍然�
 ### 步骤 6：冒烟脚本 `scripts/smoke/TASK_06.ps1`
 1. `/api/algo/datasources` 返回 2 条，且不包含字段名 `password` / `username`；
 2. `/api/algo/sql/validate` 提交 `DELETE FROM t` → `valid == false`；提交 `SELECT 1 FROM dual` → `valid == true`；
-3. 若 `ODS_RO` 已配置：`ping` 返回 `ok == true`；`trial` 执行 `SELECT COUNT(*) AS CNT FROM HIS.PAT_VISIT WHERE ROWNUM <= 1`（若 ODS 无此表，改用 `SELECT 1 AS X FROM DUAL`）→ `rowCount == 1`；否则输出 `SKIP`；
-4. 若 `HIS_RO` 已配置：`ping` 返回 `ok == true`；`trial` 执行 `SELECT COUNT(*) AS CNT FROM COMM.DEPT_DICT WHERE ROWNUM <= 1`（失败则改 `SELECT 1 AS X FROM DUAL`）；否则 `SKIP`；
-5. 从 PostgreSQL 取 1 条 `datasource_key='ODS_RO'` 且 `sql_role` 以 `_SUM` 结尾的存量 SQL，调用 `trial`（只取 20 行）→ 成功或返回明确的 ORA 错误（两种都打印出来，不算 FAIL，回执中写明结果）；
+3. 若 `ODS_RO` 已配置：先调用 `ping`；若 `ping.ok == true`，执行 `trial`（`SELECT COUNT(*) AS CNT FROM HIS.PAT_VISIT WHERE ROWNUM <= 1`，若 ODS 无此表则改用 `SELECT 1 AS X FROM DUAL`）→ `rowCount == 1`；若 `ping.ok == false` 且为网络/监听白名单拒绝（如含 `SQLRecoverableException` / `vendorCode=17002` / `ORA-12537` / `SQLTimeoutException`），打印 `SKIP: ODS_RO 本机网络或Oracle监听白名单未放行 (<message>)` 并计入 `SKIPPED`（若为 `ORA-01017` 账号密码错误则判 `FAIL`）；未配置亦输出 `SKIP`；
+4. 若 `HIS_RO` 已配置：先调用 `ping`；若 `ping.ok == true`，执行 `trial`（`SELECT COUNT(*) AS CNT FROM COMM.DEPT_DICT WHERE ROWNUM <= 1`，失败则改 `SELECT 1 AS X FROM DUAL`）；若 `ping.ok == false` 且为网络/监听白名单拒绝，打印 `SKIP: HIS_RO 本机网络或Oracle监听白名单未放行 (<message>)` 并计入 `SKIPPED`（`ORA-01017` 判 `FAIL`）；未配置亦输出 `SKIP`；
+5. 仅在 `ODS_RO` 的 `ping.ok == true` 时，从 PostgreSQL 取 1 条 `datasource_key='ODS_RO'` 且 `sql_role` 以 `_SUM` 结尾的存量 SQL，调用 `trial`（只取 20 行）→ 成功或返回明确的 ORA 错误（两种都打印出来，不算 FAIL，回执中写明结果）；否则打印 `SKIP` 并计入 `SKIPPED`；
 6. 最后打印 `SMOKE TASK_06 DONE`（有 SKIP 时同时打印 `SKIPPED: n`）。
 
 ## 7. 验收命令
