@@ -34,7 +34,13 @@ public class OperLogService {
         } catch (Exception ignore) {
             // 未登录上下文（如系统任务）允许为空
         }
-        String ip = com.hospital.eval.common.IpUtils.getClientIp(request);
+        String ip;
+        try {
+            ip = com.hospital.eval.common.IpUtils.getClientIp(request);
+        } catch (Exception ignore) {
+            // 异步线程无请求上下文（如跑批收尾日志）
+            ip = null;
+        }
         String detailJson;
         try {
             detailJson = detail == null ? null : objectMapper.writeValueAsString(detail);
