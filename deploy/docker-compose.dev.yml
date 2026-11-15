@@ -31,14 +31,11 @@ services:
       - ./data/uploads:/data/uploads
     depends_on:
       eval-postgres: { condition: service_healthy }
-  # TASK-04：kkFileView 镜像不可用（4.4.0 标签在 docker.io 不存在；latest 拉取 30 分钟无进展，
-  # 当前网络环境下不可用），按任务书规则注释停用，其余步骤照常。
-  # 网络恢复后手动执行 `docker pull keking/kkfileview:latest`，再取消下方注释并
-  # `docker compose -f deploy/docker-compose.dev.yml --env-file deploy/.env up -d eval-kkfileview`。
-  # eval-kkfileview:
-  #   image: keking/kkfileview:latest
-  #   container_name: eval-kkfileview
-  #   environment:
-  #     KK_TRUST_HOST: "*"
-  #   ports:
-  #     - "127.0.0.1:${EVAL_KKFILE_PORT}:8012"
+  eval-kkfileview:
+    image: keking/kkfileview:latest
+    container_name: eval-kkfileview
+    restart: unless-stopped
+    environment:
+      KK_TRUST_HOST: "*"
+    ports:
+      - "127.0.0.1:${EVAL_KKFILE_PORT}:8012"

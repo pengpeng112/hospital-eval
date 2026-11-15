@@ -166,6 +166,7 @@ _DATE_LITERAL_RES = (
     re.compile(r"\bDATE\s*'(\d{4})-(\d{2})-(\d{2})'", re.IGNORECASE),
     re.compile(r"\bTO_DATE\s*\(\s*'(\d{4})-(\d{2})-(\d{2})'", re.IGNORECASE),
 )
+_HEADER_HAS_YEAR_RE = re.compile(r"(19|20)\d{2}")
 
 
 def header_year_range(header: str) -> tuple:
@@ -208,14 +209,15 @@ def literal_year_range(sql: str):
 def final_year_range(header: str, sql: str) -> tuple:
     """综合表头与 SQL 字面量求最终年份范围，返回 ``(year_from, year_to, period_flag)``。
 
-    规则（04 §7.6）：SQL 字面量推得出 → 用字面量结果；表头结果也存在且两者
-    不一致 → ``period_flag = 'PERIOD_CONFLICT'``；推不出 → 用表头结果。
-    最终 ``year_from = max(year_from, 2022)``。
+    规则（04 §7.6）：SQL 字面量推得出 → 用字面量结果；仅当表头显式含 4 位年份且
+    两者不一致时置 ``period_flag = 'PERIOD_CONFLICT'``（无年份表头豁免）；推不出
+    → 用表头结果。最终 ``year_from = max(year_from, 2022)``。
     """
     lit = literal_year_range(sql)
     if lit is not None:
+        has_year = bool(_HEADER_HAS_YEAR_RE.search(str(header or "")))
         hdr = header_year_range(header)
-        flag = "PERIOD_CONFLICT" if lit != hdr else None
+        flag = "PERIOD_CONFLICT" if (has_year and lit != hdr) else None
         return (max(lit[0], 2022), lit[1], flag)
     year_from, year_to = header_year_range(header)
     return (max(year_from, 2022), year_to, None)

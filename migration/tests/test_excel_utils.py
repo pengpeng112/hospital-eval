@@ -94,6 +94,12 @@ def test_final_year_range_conflict_prefers_literal():
         (2025, 2025, "PERIOD_CONFLICT")
 
 
+def test_final_year_range_headerless_exempts_conflict():
+    sql_2025 = "... DATE '2025-01-01' ... DATE '2026-01-01'"
+    assert final_year_range("分子", sql_2025) == (2025, 2025, None)
+    assert final_year_range("分母SQL", sql_2025) == (2025, 2025, None)
+
+
 def test_final_year_range_header_fallback_and_clamp():
     assert final_year_range("2025分子", "") == (2025, 2025, None)
     assert final_year_range("无年份表头", "") == (2022, 2025, None)

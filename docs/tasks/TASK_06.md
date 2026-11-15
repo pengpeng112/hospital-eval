@@ -102,7 +102,7 @@ powershell -ExecutionPolicy Bypass -File scripts/smoke/TASK_05.ps1     # 仍然�
 ## 7. 验收命令
 ```powershell
 # 1. 容器内编译 + 单测（挂载整个项目，使一致性测试能读到 migration/dist/sqls.json）
-docker run --rm -v "${PWD}:/workspace" -v "$env:USERPROFILE/.m2:/root/.m2" -w /workspace/hospital-eval-server maven:3.9-eclipse-temurin-17 mvn -B clean package
+docker run --rm -v "${PWD}:/workspace" -v "$env:USERPROFILE/.m2:/root/.m2" -w /workspace/hospital-eval-server maven:3.9-eclipse-temurin-17 mvn -B "-Dmaven.repo.local=/root/.m2/repository" clean package
 # 2. 重建并启动后端
 docker compose -f deploy/docker-compose.dev.yml --env-file deploy/.env up -d --build eval-server
 Start-Sleep -Seconds 25

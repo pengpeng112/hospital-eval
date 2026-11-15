@@ -59,7 +59,7 @@ powershell -ExecutionPolicy Bypass -File scripts/smoke/TASK_06.ps1     # 无 FAI
    - 只给了 `metricIds` → 这些指标下的**全部**实例；
    - 两者都空 → 抛 `BizException(400, "必须指定指标或科室实例")`。
 2. 跳过 `skip_flag = true` 的实例（为它们在 `eval_exec_task` 写一条 `SKIPPED`，`error_msg='SKIP_FLAG'`）。
-3. 对每个实例取 `is_active = true` 的 SQL，过滤出 `[period_start 年, period_end 年]` 与请求 `years` 有交集的；每条 SQL 生成一个子任务（`PENDING`）。
+3. 对每个实例按 `sql_role` 分组取 `is_active = true` 的 SQL，按 04 §8.1“同实例同角色多条有效 SQL 按年选优”规则为每个请求年份 `y` 选出唯一胜出 SQL（年份跨度 `periodEndYear - periodStartYear` 更小者优先，相同则 `id` 更大者优先），汇总每条 SQL 分到的胜出年份集合 `assignedYears`；只为 `assignedYears` 非空的 SQL 生成子任务（`PENDING`，在内存中携带 `assignedYears` 传给执行器）。
 4. 没有任何 SQL 的实例：写一条 `SKIPPED` 子任务，`error_msg='NO_SQL'`（这些等待人工填报）。
 
 ### 步骤 2：创建批次
@@ -72,7 +72,7 @@ powershell -ExecutionPolicy Bypass -File scripts/smoke/TASK_06.ps1     # 无 FAI
 3. 数据源未配置 → `FAILED`，`error_msg='DATASOURCE_NOT_CONFIGURED: HIS_RO'`。
 4. 用对应 `JdbcTemplate.query(executableSql, RowCallbackHandler)` 流式读取（**不要**一次 `queryForList` 全部读进内存）；
 5. 读取 `ResultSetMetaData`，用列别名（`getColumnLabel`）按 04 §8.1 找年份列；年份值可能是数字、字符串 `'2025'` 或日期，统一转成 4 位整数年；
-6. 按 04 §8.1 过滤年份（`year_from ≤ 年 ≤ year_to` 且在请求 `years` 内）；
+6. 按 04 §8.1 过滤年份（`year_from ≤ 年 ≤ year_to` 且属于本子任务分到的 `assignedYears`）；
 7. **SUM 形态**：按 04 §8.2 找数值列，每年累加；
 8. **DTL 形态**：按 04 §8.3 映射列；时间列用 `getTimestamp`；CLOB 列用 `getClob` 只读前 500 字符；其余列 `getString` 截断 500 字符放入 `ext` Map；
 9. 行数 > 500,000 → 立即停止读取，`FAILED`，`error_msg='ROW_LIMIT_EXCEEDED'`，并删除本子任务已写入的明细；
@@ -116,6 +116,7 @@ powershell -ExecutionPolicy Bypass -File scripts/smoke/TASK_06.ps1     # 无 FAI
   4. `unit='百分比（%）'`，num=33、den=129 → `result_val=25.5814`；
   5. den=0 → `result_val=null`；
   6. `skip_flag=true` 的科室不参与全院计算。
+- `BatchPlannerTest`（或静态选优方法单测）：同一 `(scope_id, sql_role)` 含两条 `is_active=true` SQL（`id=1: 202201~202512`、`id=2: 202501~202512`），请求 `years=[2022,2025]` 时 `id=1` 分到 `[2022]`、`id=2` 分到 `[2025]`；若请求 `years=[2025]` 则只为 `id=2` 生成子任务；若两条均为 `202201~202512` 则只为 `id=2` 生成子任务。
 
 ### 步骤 8：冒烟脚本 `scripts/smoke/TASK_07.ps1`
 1. 调用 `/api/batch/run` 不带 `metricIds`/`scopeIds` → 返回 `code == 400`；
@@ -131,7 +132,7 @@ powershell -ExecutionPolicy Bypass -File scripts/smoke/TASK_06.ps1     # 无 FAI
 
 ## 8. 验收命令
 ```powershell
-docker run --rm -v "${PWD}:/workspace" -v "$env:USERPROFILE/.m2:/root/.m2" -w /workspace/hospital-eval-server maven:3.9-eclipse-temurin-17 mvn -B clean package
+docker run --rm -v "${PWD}:/workspace" -v "$env:USERPROFILE/.m2:/root/.m2" -w /workspace/hospital-eval-server maven:3.9-eclipse-temurin-17 mvn -B "-Dmaven.repo.local=/root/.m2/repository" clean package
 docker compose -f deploy/docker-compose.dev.yml --env-file deploy/.env up -d --build eval-server
 Start-Sleep -Seconds 25
 powershell -ExecutionPolicy Bypass -File scripts/smoke/TASK_05.ps1
