@@ -1,0 +1,37 @@
+server:
+  port: 48080
+  servlet:
+    encoding: { charset: UTF-8, force: true }
+
+spring:
+  application:
+    name: hospital-eval-server
+  datasource:
+    url: jdbc:postgresql://${EVAL_PG_HOST:127.0.0.1}:${EVAL_PG_INNER_PORT:5432}/${POSTGRES_DB:hospital_eval}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+  servlet:
+    multipart: { max-file-size: 100MB, max-request-size: 110MB }
+  jackson:
+    time-zone: Asia/Shanghai
+    date-format: "yyyy-MM-dd HH:mm:ss"
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto
+
+sa-token:
+  token-name: Authorization
+  token-prefix: Bearer
+  timeout: 43200
+  is-concurrent: true
+  is-log: false
+
+eval:
+  init-admin-password: ${EVAL_INIT_ADMIN_PASSWORD:}
+  init-user-password: ${EVAL_INIT_USER_PASSWORD:}
+  jwt-secret: ${JWT_SECRET:}
+  upload-dir: ${EVAL_UPLOAD_DIR:/data/uploads}
