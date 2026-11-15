@@ -124,3 +124,25 @@ def test_scope_schema_and_uniqueness():
         assert s["source_type"] in ("ROOT_12", "CH3_SHEET", "CH3_FUNC", "MEDICAL_DEPT", "SINGLE_DISEASE")
         assert s["extract_mode"] in ("SYS", "MANUAL", "HYBRID", "PROV")
         assert isinstance(s["skip_flag"], bool)
+
+
+def test_manual_overrides_and_medical_dept_priority():
+    sc, sq = _data()
+    scopes = sc["scopes"]
+    r12_scopes = [s for s in scopes if s["source_type"] == "ROOT_12"]
+    assert len(r12_scopes) == 1452
+    assert sum(1 for s in r12_scopes if s["match_method"] == "MANUAL_NEEDED") == 0
+
+    by_key = {s["scope_key"]: s for s in scopes}
+    for key in (
+        "25.2.3.3.5.4.3|神经内一科",
+        "25.2.3.3.5.4.4|神经内一科",
+        "25.2.3.3.5.4.5|神经内一科",
+    ):
+        assert key in by_key, f"缺少神经人工纠偏实例: {key}"
+
+    med_scope = by_key.get("25.2.3.2.2.1.17|医疗部")
+    assert med_scope is not None
+    assert med_scope["source_type"] == "MEDICAL_DEPT"
+    med_sqls = [s for s in sq["sqls"] if s["scope_key"] == "25.2.3.2.2.1.17|医疗部"]
+    assert len(med_sqls) >= 1

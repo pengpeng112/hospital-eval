@@ -193,7 +193,7 @@ def load_metric_dict():
 
 
 class Matcher:
-    """04 §7.10 指标匹配：CODE → NAME → MANUAL → MANUAL_NEEDED（含候选）。"""
+    """04 §7.10 指标匹配：MANUAL（显式人工覆盖优先）→ CODE → NAME → MANUAL_NEEDED（含候选）。"""
 
     def __init__(self, alias_idx, name_idx, manual_map):
         self.alias_idx = alias_idx
@@ -233,6 +233,9 @@ class Matcher:
         return result
 
     def _match(self, excel_name, source_ref):
+        mapped = self.manual_map.get(source_ref)
+        if mapped:
+            return (mapped, "MANUAL")
         alias = extract_alias_code(excel_name or "")
         if alias and len(self.alias_idx.get(alias, ())) == 1:
             code = next(iter(self.alias_idx[alias]))
@@ -241,9 +244,6 @@ class Matcher:
         if norm and len(self.name_idx.get(norm, ())) == 1:
             code = next(iter(self.name_idx[norm]))
             return (code, "NAME")
-        mapped = self.manual_map.get(source_ref)
-        if mapped:
-            return (mapped, "MANUAL")
         cands = self.candidates_for(norm)
         self.unmatched.append({
             "source_ref": source_ref,
@@ -374,6 +374,7 @@ def parse_sheet(wb, file_name, sheet, source_type, specialty_name, seq_num,
         else:
             main_info = dict(last_main)
             main_info["row_no"] = row_no
+            metric_code = main_info["metric_code"]
             st["child"] += 1
 
         dm = dict_by_code.get(metric_code) if metric_code else None
@@ -569,39 +570,47 @@ def main():
                     matcher, dict_by_code, pair_map, spec_first, sink, stats)
         wb.close()
 
-    # ---- 第三章总表：按 Sheet 名规则选择 ----
-    wb = openpyxl.load_workbook(CH3_PATH, read_only=False, data_only=True)
-    for ws in wb.worksheets:
+    # ---- 第三章总表：先解析 CH3_SHEET，记录职能指标 Sheet 名留待医疗部之后解析 ----
+    wb_ch3 = openpyxl.load_workbook(CH3_PATH, read_only=False, data_only=True)
+    func_sheets = []
+    for ws in wb_ch3.worksheets:
         name = ws.title
         if name.startswith("职能指标"):
-            source_type = "CH3_FUNC"
-        elif name == "HIS统计肿瘤 勿动":
+            func_sheets.append(name)
             continue
-        else:
-            num = cn_num(name)
-            if num and num in root_numerals:
-                skipped_ch3.append({"sheet": name, "reason": f"ROOT_12 文件 {root_numerals[num]} 以同一序号开头"})
-                continue
-            if not num:
-                skipped_ch3.append({"sheet": name, "reason": "无中文序号且非职能指标"})
-                continue
-            source_type = "CH3_SHEET"
+        if name == "HIS统计肿瘤 勿动":
+            continue
+        num = cn_num(name)
+        if num and num in root_numerals:
+            skipped_ch3.append({"sheet": name, "reason": f"ROOT_12 文件 {root_numerals[num]} 以同一序号开头"})
+            continue
+        if not num:
+            skipped_ch3.append({"sheet": name, "reason": "无中文序号且非职能指标"})
+            continue
+        source_type = "CH3_SHEET"
         print(f"[{source_type}] {name}", flush=True)
         specialties.append({"specialty_name": name, "source_file": os.path.basename(CH3_PATH), "source_type": source_type})
-        seq = cn_num(name)
-        parse_sheet(wb, os.path.basename(CH3_PATH), name, source_type, name, seq,
+        parse_sheet(wb_ch3, os.path.basename(CH3_PATH), name, source_type, name, num,
                     matcher, dict_by_code, pair_map, spec_first, sink, stats)
-    wb.close()
 
-    # ---- 医疗部 ----
-    wb = openpyxl.load_workbook(MEDICAL_PATH, read_only=False, data_only=True)
-    ws = wb.worksheets[0]
+    # ---- 医疗部（先于 CH3_FUNC，保留医疗部真实 SQL 与基线数据）----
+    wb_med = openpyxl.load_workbook(MEDICAL_PATH, read_only=False, data_only=True)
+    ws = wb_med.worksheets[0]
     title = cell_str(ws.cell(row=1, column=1).value) or os.path.basename(MEDICAL_PATH)[:-5]
     print(f"[MEDICAL_DEPT] {ws.title!r}", flush=True)
     specialties.append({"specialty_name": title, "source_file": os.path.basename(MEDICAL_PATH), "source_type": "MEDICAL_DEPT"})
-    parse_sheet(wb, os.path.basename(MEDICAL_PATH), ws.title, "MEDICAL_DEPT", title, None,
+    parse_sheet(wb_med, os.path.basename(MEDICAL_PATH), ws.title, "MEDICAL_DEPT", title, None,
                 matcher, dict_by_code, pair_map, spec_first, sink, stats)
-    wb.close()
+    wb_med.close()
+
+    # ---- 第三章职能指标（CH3_FUNC）----
+    for name in func_sheets:
+        source_type = "CH3_FUNC"
+        print(f"[{source_type}] {name}", flush=True)
+        specialties.append({"specialty_name": name, "source_file": os.path.basename(CH3_PATH), "source_type": source_type})
+        parse_sheet(wb_ch3, os.path.basename(CH3_PATH), name, source_type, name, cn_num(name),
+                    matcher, dict_by_code, pair_map, spec_first, sink, stats)
+    wb_ch3.close()
 
     # ---- 单病种：先看结构再决定是否解析（步骤 5）----
     print("=== 单病种文件前 5 行 ===", flush=True)
