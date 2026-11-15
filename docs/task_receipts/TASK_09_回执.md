@@ -3,7 +3,7 @@
 - 执行 AI / 模型：ZCode / GLM-5.3-Flash（account:bigmodel-individual-coding-plan）
 - 开始 / 结束时间：2026-11-15 21:20 / 2026-11-15 22:10（Asia/Shanghai）
 - 状态：已完成（不连 Oracle；沙箱只做静态校验）
-- Git 提交号：见文末（提交后回填）
+- Git 提交号：`25fd545 TASK-09: 算法管理与SQL版本留痕接口`（任务交付内容提交，含本回执；本行由紧随其后的一次仅回执小提交入库）
 - 环境说明：会话期间 Docker Desktop 引擎意外停止，已由本 AI 重新启动并确认 eval-postgres 数据完好（VERIFY OK）后继续。
 
 ## 一、前置检查结果
