@@ -109,7 +109,10 @@ def test_sql_schema_invariants():
     sq = _load(SQL_PATH)
     assert len({s["sql_key"] for s in sq["sqls"]}) == len(sq["sqls"]), "sql_key 存在重复"
     for s in sq["sqls"]:
-        assert s["formal_file_match"] is None  # TASK-03 才回填
+        # TASK-03 已回填 formal_file_match：结构必须完整且 status 合法（TASK-02 时的
+        # "is None" 仅为回填前的生命周期占位断言，随任务时序更新）
+        ffm = s["formal_file_match"]
+        assert isinstance(ffm, dict) and ffm.get("status") in ("SAME", "DIFF", "NOT_FOUND")
         assert s["sql_role"] in ("NUM_DTL", "DEN_DTL", "NUM_SUM", "DEN_SUM")
         assert s["ds_flag"] in (None, "DS_CONFLICT", "DS_UNKNOWN")
         assert s["period_flag"] in (None, "PERIOD_CONFLICT")
