@@ -3,7 +3,7 @@
 - 执行 AI / 模型：ZCode / GLM-5.3-Flash（account:bigmodel-individual-coding-plan）
 - 开始 / 结束时间：2026-11-15 19:35 / 2026-11-15 20:12（Asia/Shanghai）
 - 状态：已完成（Oracle 双源因本机监听白名单未放行按规则 SKIP，编码与冒烟断言全部按预期工作）
-- Git 提交号：见文末（提交后回填）
+- Git 提交号：`388abed TASK-06: 只读SQL沙箱与Oracle只读数据源`（任务交付内容提交，含本回执；本行由紧随其后的一次仅回执小提交入库）
 - **声明：本任务对 Oracle 只执行了 SELECT（`SELECT 1 FROM DUAL` 连通探测与带 ROWNUM 包裹的试跑，且实际均未到达数据库——被本机白名单拦截于连接阶段），写入数量为 0。**
 
 ## 一、前置检查结果
