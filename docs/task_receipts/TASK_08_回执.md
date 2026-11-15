@@ -3,7 +3,7 @@
 - 执行 AI / 模型：ZCode / GLM-5.3-Flash（account:bigmodel-individual-coding-plan）
 - 开始 / 结束时间：2026-11-15 21:20 / 2026-11-15 22:15（Asia/Shanghai）
 - 状态：已完成（`sync-dept-codes` 因本机 HIS 监听白名单未放行按规则 SKIP）
-- Git 提交号：见文末（提交后回填）
+- Git 提交号：`f5ea57c TASK-08: 指标维护与部门管理接口`（任务交付内容提交，含本回执；本行由紧随其后的一次仅回执小提交入库）
 - 基线：HEAD = 4ee1f0a（TASK-07），metric 实体/Mapper 已在 TASK-07 按任务书预告建于同包，本任务直接复用并新增
 
 ## 一、前置检查结果
