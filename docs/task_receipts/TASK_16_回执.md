@@ -124,5 +124,5 @@ DELETE FROM eval_manual_evidence WHERE stat_period = '2099';
 提交信息：`TASK-16: 人工上报与工作台页面`
 
 ```text
-（提交后回填）
+224b05a TASK-16: 人工上报与工作台页面
 ```
