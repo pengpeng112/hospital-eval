@@ -5,6 +5,7 @@ import com.hospital.eval.algo.entity.MetricSql;
 import com.hospital.eval.algo.mapper.MetricSqlMapper;
 import com.hospital.eval.engine.entity.ExecTask;
 import com.hospital.eval.engine.entity.MetricResult;
+import com.hospital.eval.engine.entity.ExecBatch;
 import com.hospital.eval.engine.mapper.ExecTaskMapper;
 import com.hospital.eval.engine.mapper.MetricResultMapper;
 import com.hospital.eval.metric.entity.MetricDeptScope;
@@ -16,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
+import com.hospital.eval.common.BizException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
@@ -653,5 +655,93 @@ public class ResultAggregator {
     private String unitOf(long metricId) {
         MetricDict dict = dictMapper.selectById(metricId);
         return dict == null ? null : dict.getUnit();
+    }
+
+    // ==================== TASK-11 新增（供人工上报/混合勾选重算调用） ====================
+    // 以下两个公开方法为 TASK-11 白名单明确允许的新增；不改动上方既有方法逻辑。
+
+    /**
+     * 重算科室行（混合勾选后原地更新当期行）：
+     * 分子 = 当期批次 DEN 明细中 manual_selected = true 的行数；
+     * 分母 = 当期批次 DEN 明细总行数（不变）；
+     * 原地更新当期行 numerator_val / result_val / data_source_tag = HYBRID，不新建行。
+     * 返回新的分子值。
+     */
+    public BigDecimal recomputeScopeRow(long metricId, long scopeId, int year) {
+        MetricResult current = currentResult(metricId, scopeId, String.valueOf(year));
+        if (current == null) {
+            throw new BizException(400, "该实例该年没有当期结果行");
+        }
+        long den = countDetails(current.getBatchId(), metricId, scopeId, year, "DEN", false);
+        long num = countDetails(current.getBatchId(), metricId, scopeId, year, "DEN", true);
+        String unit = unitOf(metricId);
+        Double resultValD = computeResultVal((double) num, (double) den, unit);
+        BigDecimal resultVal = resultValD == null ? null : BigDecimal.valueOf(resultValD);
+        current.setNumeratorVal(BigDecimal.valueOf(num));
+        current.setDenominatorVal(BigDecimal.valueOf(den));
+        current.setResultVal(resultVal);
+        current.setDataSourceTag("HYBRID");
+        current.setUpdateTime(LocalDateTime.now());
+        resultMapper.updateById(current);
+        return BigDecimal.valueOf(num);
+    }
+
+    /**
+     * 重算全院行（scope_id = 0，当期或指定 batch 语境下调用）：
+     * 各非免统科室按当期行取值；DEDUP_DTL 且全员 DTL/混合池 → 跨科室合并去重；
+     * 写入 BATCH_MANUAL 批次的新行并按 04 §5.4 切换当期。
+     */
+    public void recomputeHospitalRow(long metricId, int year) {
+        MetricDict dict = dictMapper.selectById(metricId);
+        String aggMode = dict == null ? "DEDUP_DTL" : dict.getAggMode();
+        List<MetricDeptScope> scopes = scopeMapper.selectList(
+                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<MetricDeptScope>()
+                        .eq("metric_id", metricId).orderByAsc("id"));
+        List<HospitalPart> parts = new ArrayList<>();
+        List<Long> batchIds = new ArrayList<>();
+        for (MetricDeptScope s : scopes) {
+            if (Boolean.TRUE.equals(s.getSkipFlag())) {
+                continue;
+            }
+            MetricResult r = currentResult(metricId, s.getId(), String.valueOf(year));
+            if (r == null) {
+                continue; // 无当期行：NULL 不参与相加；合并去重自然排除
+            }
+            RoleShapes shapes = roleShapes(s.getId(), metricId);
+            ScopeExtract ex = extractOf(s, dict);
+            Long batch = r.getBatchId();
+            Set<String> numKeys = "DTL".equals(shapes.numKind())
+                    ? fetchKeys(metricId, year, s.getId(), batch, "NUM", false) : null;
+            Set<String> denKeys = "DTL".equals(shapes.denKind())
+                    ? fetchKeys(metricId, year, s.getId(), batch, "DEN", false) : null;
+            parts.add(new HospitalPart(s.getId(), batch, false, ex, false, false,
+                    shapes.numKind(), toDouble(r.getNumeratorVal()), numKeys,
+                    shapes.denKind(), toDouble(r.getDenominatorVal()), denKeys,
+                    null, isManualBatch(batch)));
+        }
+        boolean merge = shouldMergeDedup(aggMode, parts);
+        Set<String> mergedNum = merge ? fetchMergedKeys(metricId, year, parts, true) : null;
+        Set<String> mergedDen = merge ? fetchMergedKeys(metricId, year, parts, false) : null;
+        NumDen nd = computeHospital(aggMode, parts, mergedNum, mergedDen);
+
+        long manualBatch = manualBatchId();
+        insertResult(manualBatch, metricId, 0L, year, nd, null, null, false);
+    }
+
+    private long manualBatchId() {
+        List<Long> ids = jdbcTemplate.queryForList(
+                "SELECT id FROM eval_exec_batch WHERE batch_no = ? ORDER BY id LIMIT 1",
+                Long.class, MANUAL_BATCH_NO);
+        if (!ids.isEmpty()) {
+            return ids.get(0);
+        }
+        jdbcTemplate.update("INSERT INTO eval_exec_batch (batch_no, trigger_type, is_current_version, "
+                + "version_tag, exec_status, start_time, end_time) VALUES "
+                + "(?, 'MANUAL_INPUT', true, '人工上报', 'SUCCESS', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                MANUAL_BATCH_NO);
+        ids = jdbcTemplate.queryForList(
+                "SELECT id FROM eval_exec_batch WHERE batch_no = ? ORDER BY id LIMIT 1",
+                Long.class, MANUAL_BATCH_NO);
+        return ids.get(0);
     }
 }
