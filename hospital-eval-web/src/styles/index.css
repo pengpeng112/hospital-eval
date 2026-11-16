@@ -1,0 +1,27 @@
+/* 全局样式（TASK-12 步骤 7）：后台常规风格，无动画、无渐变大图 */
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  background: #f5f7fa;
+  font-size: 14px;
+  color: #303133;
+}
+
+/* 内容区卡片：白底、内边距 16px */
+.eval-card {
+  background: #fff;
+  padding: 16px;
+  border-radius: 4px;
+}
+
+/* 表格紧凑：配合各页面 size="small" 使用 */
+.el-table {
+  --el-table-header-bg-color: #f5f7fa;
+}
