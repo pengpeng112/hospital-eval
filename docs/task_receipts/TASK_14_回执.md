@@ -118,5 +118,5 @@ PS> Get-ChildItem -Path hospital-eval-web/src -Include *.vue,*.js -Recurse | Sel
 提交信息：`TASK-14: 算法管理页面`
 
 ```text
-（提交后回填）
+1d989d1 TASK-14: 算法管理页面
 ```
