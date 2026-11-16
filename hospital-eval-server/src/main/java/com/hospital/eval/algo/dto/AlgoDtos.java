@@ -38,9 +38,12 @@ public class AlgoDtos {
         public String changeReason;
     }
 
-    /** PUT /api/algo/sqls/{id} 入参（changeType 不允许为「新增」）。 */
+    /** PUT /api/algo/sqls/{id} 入参（changeType 不允许为「新增」；datasourceKey 可选）。 */
     @Data
     public static class UpdateSqlReq {
+        /** 可选，传空则沿用原数据源 */
+        public String datasourceKey;
+
         @NotBlank(message = "periodStart 不能为空")
         public String periodStart;
 

@@ -163,16 +163,23 @@ public class SqlVersionService {
         }
         validatePeriod(req.getPeriodStart(), req.getPeriodEnd());
         MetricSql old = getSql(id);
+        String newDs = (req.getDatasourceKey() == null || req.getDatasourceKey().isBlank())
+                ? old.getDatasourceKey() : req.getDatasourceKey().trim();
+        if (!DATA_SOURCES.contains(newDs)) {
+            throw new BizException(400, "datasourceKey 必须为 HIS_RO / ODS_RO");
+        }
         boolean sqlSame = old.getSqlAnnotated().equals(req.getSqlAnnotated());
         boolean periodSame = old.getPeriodStart().equals(req.getPeriodStart())
                 && old.getPeriodEnd().equals(req.getPeriodEnd());
-        if (sqlSame && periodSame) {
+        boolean dsSame = java.util.Objects.equals(old.getDatasourceKey(), newDs);
+        if (sqlSame && periodSame && dsSame) {
             throw new BizException(400, "未检测到修改");
         }
         ValidationResult vr = validator.validate(req.getSqlAnnotated());
         if (!vr.isValid()) {
             throw new BizException(400, "SQL 校验未通过：" + String.join("；", vr.getErrors()));
         }
+        DatasourceRouter.Route route = DatasourceRouter.route(vr.getExecutableSql());
         int newVersion = old.getVersionNo() + 1;
 
         MetricSqlHis his = new MetricSqlHis();
@@ -192,16 +199,26 @@ public class SqlVersionService {
 
         MetricSql upd = new MetricSql();
         upd.setId(id);
+        upd.setDatasourceKey(newDs);
         upd.setPeriodStart(req.getPeriodStart());
         upd.setPeriodEnd(req.getPeriodEnd());
         upd.setSqlAnnotated(req.getSqlAnnotated());
         upd.setSqlExecutable(vr.getExecutableSql());
         upd.setVersionNo(newVersion);
         upd.setLastVerifyStatus(0);
+        upd.setDsFlag(route.dsFlag());
+        upd.setPeriodFlag(null);
+        upd.setEmrSys(route.emrSys());
         upd.setLastModifyUser(operatorName);
         upd.setLastModifyReason(req.getChangeReason());
         upd.setUpdateTime(LocalDateTime.now());
         sqlMapper.updateById(upd);
+        // updateById 默认忽略 null 值，显式同步可空标记位以清除旧 period_flag/ds_flag
+        sqlMapper.update(null, new com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper<MetricSql>()
+                .eq("id", id)
+                .set("ds_flag", route.dsFlag())
+                .set("period_flag", null)
+                .set("emr_sys", route.emrSys()));
         return new UpdateResult(old.getVersionNo(), newVersion);
     }
 

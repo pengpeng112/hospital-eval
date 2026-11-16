@@ -81,8 +81,11 @@ public class ExportController {
                     node.fields().forEachRemaining(e -> {
                         String year = e.getKey();
                         JsonNode inner = e.getValue();
-                        d.origData.put(year, inner.path("data").asText(null));
-                        d.origSource.put(year, inner.path("source").asText(null));
+                        String origVal = inner.path("data").asText(null);
+                        if (origVal != null && !origVal.isBlank()) {
+                            d.origData.put(year, origVal);
+                            d.origSource.put(year, inner.path("source").asText(null));
+                        }
                     });
                 } catch (Exception ignore) {
                     // JSONB 原文格式异常时该行按无兜底处理

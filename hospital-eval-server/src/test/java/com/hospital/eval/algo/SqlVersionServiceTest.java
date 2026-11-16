@@ -105,4 +105,19 @@ class SqlVersionServiceTest {
         assertTrue(e.getMessage().contains("至少 5 个字"));
     }
 
+    // 修改时支持切换 datasourceKey 并同步重算 dsFlag / emrSys
+    @Test
+    void updateCanSwitchDatasourceAndRecomputeFlags() {
+        var r = req("SELECT * FROM MEDREC.PAT_MASTER_INDEX", "202501", "202512",
+                "口径升级", "纠正误配数据源为 HIS_RO");
+        r.datasourceKey = "HIS_RO";
+        var out = service.update(5L, r, "信息科管理员");
+        assertEquals(2, out.newVersionNo());
+        var sqlCaptor = ArgumentCaptor.forClass(MetricSql.class);
+        verify(sqlMapper).updateById(sqlCaptor.capture());
+        assertEquals("HIS_RO", sqlCaptor.getValue().getDatasourceKey());
+        assertEquals(null, sqlCaptor.getValue().getDsFlag());
+        assertEquals("NONE", sqlCaptor.getValue().getEmrSys());
+    }
+
 }

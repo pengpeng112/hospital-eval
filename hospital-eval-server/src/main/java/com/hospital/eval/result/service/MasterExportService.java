@@ -73,8 +73,7 @@ public class MasterExportService {
                 String source = null;
                 if ("CHAPTER".equals(r.rowType)) {
                     core.cellKeys.put(key, new YearCell(null, null, "EMPTY"));
-                    core.counters.emptyCells++; // 章节两列恒空
-                    continue;
+                    continue; // 章节两列恒空，不计入指标空单元格数
                 }
                 // METRIC 行按自身 (rowNo, year) 取结果；ATOM 行优先自身结果，
                 // 无则兜底所属指标 (metricCode, year) 的结果
@@ -115,14 +114,17 @@ public class MasterExportService {
                 if (data != null && !data.isBlank()) {
                     core.cellKeys.put(key, new YearCell(data, source, "SYS"));
                     core.counters.sysCells++;
-                } else if (r.origData.containsKey(String.valueOf(year))) {
-                    data = r.origData.get(String.valueOf(year));
-                    source = r.origSource.get(String.valueOf(year));
-                    core.cellKeys.put(key, new YearCell(data, source, "ORIG"));
-                    core.counters.origCells++;
                 } else {
-                    core.cellKeys.put(key, new YearCell(null, null, "EMPTY"));
-                    core.counters.emptyCells++;
+                    String origVal = r.origData.get(String.valueOf(year));
+                    if (origVal != null && !origVal.isBlank()) {
+                        data = origVal;
+                        source = r.origSource.get(String.valueOf(year));
+                        core.cellKeys.put(key, new YearCell(data, source, "ORIG"));
+                        core.counters.origCells++;
+                    } else {
+                        core.cellKeys.put(key, new YearCell(null, null, "EMPTY"));
+                        core.counters.emptyCells++;
+                    }
                 }
             }
         }

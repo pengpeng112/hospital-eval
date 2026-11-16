@@ -231,6 +231,11 @@ public class ScopeService {
     // ---------------- 步骤 6：导出 / 导入 ----------------
 
     public org.apache.poi.ss.usermodel.Workbook exportWorkbook() {
+        return exportWorkbook(null, null, null, null);
+    }
+
+    public org.apache.poi.ss.usermodel.Workbook exportWorkbook(Long metricId, Long deptId,
+                                                               Boolean skipFlag, String keyword) {
         org.apache.poi.ss.usermodel.Workbook wb = new org.apache.poi.xssf.usermodel.XSSFWorkbook();
         var sheet = wb.createSheet("科室实例");
         var header = sheet.createRow(0);
@@ -243,7 +248,7 @@ public class ScopeService {
         int page = 1;
         List<Map<String, Object>> batch;
         do {
-            Map<String, Object> resp = list(page, 200, null, null, null, null);
+            Map<String, Object> resp = list(page, 200, metricId, deptId, skipFlag, keyword);
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> list = (List<Map<String, Object>>) resp.get("list");
             batch = list;
@@ -320,29 +325,32 @@ public class ScopeService {
                 }
                 String range = stringCell(row.getCell(5));
                 s.setHisDeptNames(range);
-                Long liaison = findUserByName(stringCell(row.getCell(6)));
-                if (stringCell(row.getCell(6)).isEmpty() && liaison == null) {
+                String liaisonCell = stringCell(row.getCell(6));
+                Long liaison = resolveUserId(liaisonCell, s.getRespDeptId(), "LIAISON");
+                if (liaisonCell.isEmpty() && liaison == null) {
                     s.setLiaisonUserId(null);
                 } else if (liaison == null) {
-                    errors.add(new ImportError(r + 1, "联络员查不到或重名：" + stringCell(row.getCell(6))));
+                    errors.add(new ImportError(r + 1, "联络员查不到或重名：" + liaisonCell));
                     continue;
                 } else {
                     s.setLiaisonUserId(liaison);
                 }
-                Long auditor = findUserByName(stringCell(row.getCell(7)));
-                if (stringCell(row.getCell(7)).isEmpty() && auditor == null) {
+                String auditorCell = stringCell(row.getCell(7));
+                Long auditor = resolveUserId(auditorCell, null, "AUDITOR");
+                if (auditorCell.isEmpty() && auditor == null) {
                     s.setAuditorUserId(null);
                 } else if (auditor == null) {
-                    errors.add(new ImportError(r + 1, "内审员查不到或重名：" + stringCell(row.getCell(7))));
+                    errors.add(new ImportError(r + 1, "内审员查不到或重名：" + auditorCell));
                     continue;
                 } else {
                     s.setAuditorUserId(auditor);
                 }
-                Long leader = findUserByName(stringCell(row.getCell(8)));
-                if (stringCell(row.getCell(8)).isEmpty() && leader == null) {
+                String leaderCell = stringCell(row.getCell(8));
+                Long leader = resolveUserId(leaderCell, null, "FUNC_LEADER");
+                if (leaderCell.isEmpty() && leader == null) {
                     s.setFuncLeaderUserId(null);
                 } else if (leader == null) {
-                    errors.add(new ImportError(r + 1, "终审人查不到或重名：" + stringCell(row.getCell(8))));
+                    errors.add(new ImportError(r + 1, "终审人查不到或重名：" + leaderCell));
                     continue;
                 } else {
                     s.setFuncLeaderUserId(leader);
@@ -502,14 +510,75 @@ public class ScopeService {
         };
     }
 
-    /** 按 real_name 查用户：唯一 → id；查不到或多个 → null（调用方记错误行）。 */
-    private Long findUserByName(String realName) {
-        if (realName == null || realName.isBlank()) {
+    /**
+     * 三级定位用户：
+     * 1) 姓名(科室) 格式联查姓名+科室；
+     * 2) username（含 姓名_科室）精确匹配；
+     * 3) real_name 唯一直接命中；若重名，联络员按本实例 respDeptId 精确消歧，
+     *    内审员/终审人按角色（及医疗部）精确消歧；仍不唯一返回 null 记错误行。
+     */
+    private Long resolveUserId(String rawText, Long respDeptId, String roleCode) {
+        if (rawText == null || rawText.isBlank()) {
             return null;
         }
-        List<SysUser> users = userMapper.selectList(
-                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<SysUser>()
-                        .eq("real_name", realName.trim()));
-        return users.size() == 1 ? users.get(0).getId() : null;
+        String text = rawText.trim();
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        Matcher nameDept = Pattern.compile("^(.+?)[（(](.+?)[）)]$").matcher(text);
+        if (nameDept.matches()) {
+            List<Long> ids = jdbc.queryForList(
+                    "SELECT u.id FROM sys_user u JOIN sys_dept d ON d.id = u.dept_id "
+                            + "WHERE u.real_name = ? AND d.dept_name = ?",
+                    Long.class, nameDept.group(1).trim(), nameDept.group(2).trim());
+            if (ids.size() == 1) {
+                return ids.get(0);
+            }
+        }
+        List<Long> byUsername = jdbc.queryForList(
+                "SELECT id FROM sys_user WHERE username = ?", Long.class, text);
+        if (byUsername.size() == 1) {
+            return byUsername.get(0);
+        }
+        List<Map<String, Object>> candidates = jdbc.queryForList(
+                "SELECT id, dept_id FROM sys_user WHERE real_name = ?", text);
+        if (candidates.isEmpty()) {
+            return null;
+        }
+        if (candidates.size() == 1) {
+            return ((Number) candidates.get(0).get("id")).longValue();
+        }
+        if ("LIAISON".equals(roleCode) && respDeptId != null) {
+            List<Long> deptMatched = candidates.stream()
+                    .filter(r -> r.get("dept_id") != null
+                            && ((Number) r.get("dept_id")).longValue() == respDeptId)
+                    .map(r -> ((Number) r.get("id")).longValue())
+                    .toList();
+            if (deptMatched.size() == 1) {
+                return deptMatched.get(0);
+            }
+        }
+        if (roleCode != null && !roleCode.isBlank()) {
+            List<Long> roleMatched = jdbc.queryForList(
+                    "SELECT DISTINCT u.id FROM sys_user u "
+                            + "JOIN sys_user_role ur ON ur.user_id = u.id "
+                            + "JOIN sys_role r ON r.id = ur.role_id "
+                            + "WHERE u.real_name = ? AND r.role_code = ?",
+                    Long.class, text, roleCode);
+            if (roleMatched.size() == 1) {
+                return roleMatched.get(0);
+            }
+            if ("AUDITOR".equals(roleCode) && roleMatched.size() > 1) {
+                List<Long> funcDeptMatched = jdbc.queryForList(
+                        "SELECT DISTINCT u.id FROM sys_user u "
+                                + "JOIN sys_user_role ur ON ur.user_id = u.id "
+                                + "JOIN sys_role r ON r.id = ur.role_id "
+                                + "JOIN sys_dept d ON d.id = u.dept_id "
+                                + "WHERE u.real_name = ? AND r.role_code = ? AND d.dept_name = '医疗部'",
+                        Long.class, text, roleCode);
+                if (funcDeptMatched.size() == 1) {
+                    return funcDeptMatched.get(0);
+                }
+            }
+        }
+        return null;
     }
 }

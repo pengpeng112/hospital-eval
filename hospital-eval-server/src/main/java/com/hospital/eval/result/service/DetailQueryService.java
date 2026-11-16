@@ -95,13 +95,15 @@ public class DetailQueryService {
                                                 String keyword) {
         String sql = "SELECT id, patient_id, inp_no, visit_id, patient_name, admit_dept_name, "
                 + "discharge_dept_name, admit_time, discharge_time, main_diag_code, main_diag_name, "
-                + "main_oper_code, main_oper_name, emr_doc_title, ext_json "
+                + "main_oper_code, main_oper_name, emr_sys_source, emr_doc_id, emr_doc_title, "
+                + "manual_selected, select_remark, ext_json "
                 + "FROM eval_metric_detail WHERE batch_id = ? AND metric_id = ? AND scope_id = ? "
                 + "AND stat_year = ? AND role_type = ?"
                 + (selectedOnly ? " AND manual_selected = true" : "")
                 + (keyword != null && !keyword.isBlank()
                         ? " AND (inp_no LIKE ? OR patient_id LIKE ? OR patient_name LIKE ? "
-                        + "OR main_diag_code LIKE ? OR main_diag_name LIKE ?)" : "");
+                        + "OR main_diag_code LIKE ? OR main_diag_name LIKE ?)" : "")
+                + " ORDER BY discharge_time DESC NULLS LAST, id ASC";
         List<Object> args = new ArrayList<>();
         args.add(batchId);
         args.add(metricId);
@@ -136,7 +138,11 @@ public class DetailQueryService {
             m.put("mainDiagName", rs.getString("main_diag_name"));
             m.put("mainOperCode", rs.getString("main_oper_code"));
             m.put("mainOperName", rs.getString("main_oper_name"));
+            m.put("emrSysSource", rs.getString("emr_sys_source"));
+            m.put("emrDocId", rs.getString("emr_doc_id"));
             m.put("emrDocTitle", rs.getString("emr_doc_title"));
+            m.put("manualSelected", rs.getBoolean("manual_selected"));
+            m.put("selectRemark", rs.getString("select_remark"));
             Map<String, Object> ext = new LinkedHashMap<>();
             String extText = rs.getString("ext_json");
             if (extText != null && !extText.isBlank()) {
@@ -190,6 +196,18 @@ public class DetailQueryService {
                 row.put("depts", String.join("、", deptsByKey.get(key)));
                 items.add(row);
             }
+            items.sort((a, b) -> {
+                String da = str(a.get("dischargeTime"));
+                String db = str(b.get("dischargeTime"));
+                if (da.isEmpty() && !db.isEmpty()) {
+                    return 1;
+                }
+                if (!da.isEmpty() && db.isEmpty()) {
+                    return -1;
+                }
+                int cmp = db.compareTo(da);
+                return cmp != 0 ? cmp : dedupKey(a).compareTo(dedupKey(b));
+            });
         } else {
             Long batchId = currentBatchId(q.metricId(), q.scopeId(), q.year(), q.batchId());
             if (batchId != null) {
@@ -204,7 +222,7 @@ public class DetailQueryService {
                 item.put("ext", ext);
             }
         }
-        List<Map<String, Object>> columns = columnsOf(items);
+        List<Map<String, Object>> columns = columnsOf(items, q.scopeId() == 0);
         return new DetailRows(items.size(), items, columns);
     }
 
@@ -215,7 +233,7 @@ public class DetailQueryService {
         int to = Math.min(full.list().size(), from + size);
         List<Map<String, Object>> pageRows = from >= full.list().size()
                 ? List.of() : full.list().subList(from, to);
-        List<Map<String, Object>> columns = columnsOf(pageRows);
+        List<Map<String, Object>> columns = columnsOf(pageRows, q.scopeId() == 0);
         return new DetailRows(full.total(), pageRows, columns);
     }
 
@@ -228,16 +246,25 @@ public class DetailQueryService {
         return full;
     }
 
-    private List<Map<String, Object>> columnsOf(List<Map<String, Object>> rows) {
+    private List<Map<String, Object>> columnsOf(List<Map<String, Object>> rows, boolean includeDepts) {
         List<Map<String, Object>> columns = new ArrayList<>();
-        String[][] fixed = {
+        String[][] fixedBefore = {
                 {"inpNo", "住院号"}, {"patientId", "患者ID"}, {"patientName", "姓名"},
-                {"visitId", "住院次数"}, {"mainDiagCode", "主要诊断编码"}, {"mainDiagName", "主要诊断名称"},
+                {"visitId", "住院次数"}
+        };
+        for (String[] f : fixedBefore) {
+            columns.add(Map.of("prop", f[0], "label", f[1]));
+        }
+        if (includeDepts) {
+            columns.add(Map.of("prop", "depts", "label", "涉及科室"));
+        }
+        String[][] fixedAfter = {
+                {"mainDiagCode", "主要诊断编码"}, {"mainDiagName", "主要诊断名称"},
                 {"mainOperCode", "第一手术编码"}, {"mainOperName", "第一手术名称"},
                 {"admitDeptName", "入院科室"}, {"dischargeDeptName", "出院科室"},
                 {"admitTime", "入院时间"}, {"dischargeTime", "出院时间"}, {"emrDocTitle", "文书名称"}
         };
-        for (String[] f : fixed) {
+        for (String[] f : fixedAfter) {
             columns.add(Map.of("prop", f[0], "label", f[1]));
         }
         Set<String> seen = new LinkedHashSet<>();

@@ -59,11 +59,12 @@ public class ScopeController {
     }
 
     @GetMapping("/export")
-    public void export(HttpServletResponse response) throws java.io.IOException {
+    public void export(Long metricId, Long deptId, Boolean skipFlag, String keyword,
+                       HttpServletResponse response) throws java.io.IOException {
         response.setContentType(
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         response.setHeader("Content-Disposition", "attachment; filename=scopes.xlsx");
-        var wb = scopeService.exportWorkbook();
+        var wb = scopeService.exportWorkbook(metricId, deptId, skipFlag, keyword);
         wb.write(response.getOutputStream());
         wb.close();
     }

@@ -137,28 +137,39 @@ public class ResultAggregator {
         return BigDecimal.valueOf(v).setScale(4, RoundingMode.HALF_UP).doubleValue();
     }
 
-    /** 04 §9 第 4 条：DEDUP_DTL 且全员 DTL/混合池 → 合并去重；否则数值相加。 */
-    public static boolean shouldMergeDedup(String aggMode, List<HospitalPart> parts) {
+    /** 按角色判定是否走明细合并去重：仅当 DEDUP_DTL 且所有非免统科室均非手工行且该角色全为 DTL。 */
+    public static boolean shouldMergeDedupRole(String aggMode, List<HospitalPart> parts, boolean forNum) {
         if (!"DEDUP_DTL".equals(aggMode)) {
             return false;
         }
-        for (HospitalPart p : parts) {
-            if (p.skipFlag()) {
-                continue;
-            }
-            if (p.numKind() != null && !"DTL".equals(p.numKind())) {
+        List<HospitalPart> active = parts.stream().filter(p -> !p.skipFlag()).toList();
+        if (active.isEmpty()) {
+            return false;
+        }
+        for (HospitalPart p : active) {
+            if (p.manualRow()) {
                 return false;
             }
-            if (p.denKind() != null && !"DTL".equals(p.denKind())) {
+            String kind = forNum ? p.numKind() : p.denKind();
+            if (!"DTL".equals(kind)) {
                 return false;
             }
         }
         return true;
     }
 
+    /** 04 §9 第 4 条：DEDUP_DTL 且至少有一侧全员 DTL/混合池 → 合并去重；纯手工或含 SUM/无 SQL 则累加。 */
+    public static boolean shouldMergeDedup(String aggMode, List<HospitalPart> parts) {
+        return shouldMergeDedupRole(aggMode, parts, true)
+                || shouldMergeDedupRole(aggMode, parts, false);
+    }
+
     private static Double numValueOf(HospitalPart p) {
         if (p.numFailed()) {
             return null;
+        }
+        if (p.manualRow()) {
+            return p.numValue();
         }
         if ("SUM".equals(p.numKind())) {
             return p.numValue();
@@ -172,6 +183,9 @@ public class ResultAggregator {
     private static Double denValueOf(HospitalPart p) {
         if (p.denFailed()) {
             return null;
+        }
+        if (p.manualRow()) {
+            return p.denValue();
         }
         if ("SUM".equals(p.denKind())) {
             return p.denValue();
@@ -189,10 +203,8 @@ public class ResultAggregator {
         boolean numFailed = active.stream().anyMatch(HospitalPart::numFailed);
         boolean denFailed = active.stream().anyMatch(HospitalPart::denFailed);
         Double n;
-        Double d;
-        if (shouldMergeDedup(aggMode, parts)) {
+        if (shouldMergeDedupRole(aggMode, parts, true)) {
             n = mergedNumKeys == null ? null : (double) mergedNumKeys.size();
-            d = mergedDenKeys == null ? null : (double) mergedDenKeys.size();
         } else {
             Double nAcc = null;
             for (HospitalPart p : active) {
@@ -201,6 +213,12 @@ public class ResultAggregator {
                     nAcc = (nAcc == null ? 0D : nAcc) + v;
                 }
             }
+            n = nAcc;
+        }
+        Double d;
+        if (shouldMergeDedupRole(aggMode, parts, false)) {
+            d = mergedDenKeys == null ? null : (double) mergedDenKeys.size();
+        } else {
             Double dAcc = null;
             for (HospitalPart p : active) {
                 Double v = denValueOf(p);
@@ -208,7 +226,6 @@ public class ResultAggregator {
                     dAcc = (dAcc == null ? 0D : dAcc) + v;
                 }
             }
-            n = nAcc;
             d = dAcc;
         }
         boolean anyManual = active.stream().anyMatch(HospitalPart::manualRow);
@@ -318,18 +335,19 @@ public class ResultAggregator {
                     ScopeExtract ex = extractOf(scope, dict);
                     RoleShapes shapes = roleShapes(scope.getId(), metricId);
                     MetricResult current = currentResult(metricId, scope.getId(), String.valueOf(year));
+                    boolean isManual = current != null && isManualBatch(current.getBatchId());
                     Set<String> numKeys = null;
                     Set<String> denKeys = null;
                     boolean numFailed = false;
                     boolean denFailed = false;
-                    if (current != null) {
-                        if (shapes.numKind() != null && !"SUM".equals(shapes.numKind())) {
+                    if (current != null && !isManual) {
+                        if ("DTL".equals(shapes.numKind())) {
                             numKeys = fetchKeys(metricId, year, scope.getId(), current.getBatchId(),
-                                    "NUM", false);
+                                    ex.mixedPool() ? "DEN" : "NUM", ex.mixedPool());
                         }
-                        if (shapes.denKind() != null && !"SUM".equals(shapes.denKind())) {
+                        if ("DTL".equals(shapes.denKind())) {
                             denKeys = fetchKeys(metricId, year, scope.getId(), current.getBatchId(),
-                                    "DEN", ex.mixedPool());
+                                    "DEN", false);
                         }
                     }
                     // 本批次该 (scope, year, role) 失败且无旧当期行 → 该角色失败
@@ -363,15 +381,12 @@ public class ResultAggregator {
                             shapes.numKind(), current == null ? null : toDouble(current.getNumeratorVal()), numKeys,
                             shapes.denKind(), current == null ? null : toDouble(current.getDenominatorVal()), denKeys,
                             manualSelected,
-                            current != null && isManualBatch(current.getBatchId())));
+                            isManual));
                 }
-                boolean merged = shouldMergeDedup(dict.getAggMode(), parts);
-                Set<String> mergedNum = null;
-                Set<String> mergedDen = null;
-                if (merged) {
-                    mergedNum = fetchMergedKeys(metricId, year, parts, true);
-                    mergedDen = fetchMergedKeys(metricId, year, parts, false);
-                }
+                Set<String> mergedNum = shouldMergeDedupRole(dict.getAggMode(), parts, true)
+                        ? fetchMergedKeys(metricId, year, parts, true) : null;
+                Set<String> mergedDen = shouldMergeDedupRole(dict.getAggMode(), parts, false)
+                        ? fetchMergedKeys(metricId, year, parts, false) : null;
                 NumDen h = computeHospital(dict.getAggMode(), parts, mergedNum, mergedDen);
                 boolean failed = h.numFailed() || h.denFailed()
                         || (h.num() == null && anyPartFailedForRole(parts, "NUM"))

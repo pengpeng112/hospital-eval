@@ -3,6 +3,7 @@ services:
   eval-postgres:
     image: postgres:15
     container_name: eval-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -20,6 +21,7 @@ services:
   eval-server:
     build: ../hospital-eval-server
     container_name: eval-server
+    restart: unless-stopped
     env_file: .env
     environment:
       EVAL_PG_HOST: eval-postgres

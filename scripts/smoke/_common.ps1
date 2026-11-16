@@ -1,4 +1,5 @@
 ﻿# TASK-05 冒烟公共函数（信息不打印任何密码）
+$ProgressPreference = 'SilentlyContinue'
 $Global:Base = if ($env:EVAL_SMOKE_BASE) { $env:EVAL_SMOKE_BASE } else { "http://127.0.0.1:48080" }
 $Global:EnvFile = Join-Path $PSScriptRoot "..\..\deploy\.env"
 

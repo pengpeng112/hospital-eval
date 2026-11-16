@@ -46,6 +46,9 @@ class MasterExportServiceTest {
         var extra3 = row(10, "0.25.1.5", "子项3", "ATOM", "25.2.1.2", "EXTRA");
         compound.origData.put("2025", "77.7");
         compound.origSource.put("2025", "手工统计");
+        // 空原值（空串）不得误算为 ORIG
+        extra1.origData.put("2024", "");
+        extra1.origSource.put("2024", "");
 
         List<MasterExportService.MasterRowData> rows = List.of(
                 chapter, metric, numAtom, denAtom, compound, extra1, extra2, extra3);
@@ -80,9 +83,10 @@ class MasterExportServiceTest {
         assertEquals("77.7", core.cellKeys.get("7|2025").data());
         assertEquals("ORIG", core.cellKeys.get("7|2025").origin());
 
-        // 计数：SYS = metric2025 + num + den + extra 部分
+        // 计数：SYS = 3；ORIG = 2（metric 2024 + compound 2025）；EMPTY = 9（chapter 2 格不计入）
         assertEquals(3, core.counters.sysCells);
-        assertEquals(2, core.counters.origCells); // metric 2024 + compound 2025
+        assertEquals(2, core.counters.origCells);
+        assertEquals(9, core.counters.emptyCells);
     }
 
     private MasterExportService.HospitalYearValue hv(BigDecimal num, BigDecimal val,

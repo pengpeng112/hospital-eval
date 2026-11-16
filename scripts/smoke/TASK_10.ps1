@@ -69,7 +69,7 @@ if ($cnt -and "$cnt".Trim() -match "^\d+\|\d+$") {
 
 # 7. 总表回填导出 + Python 校验
 $masterPath = Join-Path $env:TEMP "master_export.xlsx"
-Invoke-WebRequest -Uri "$Global:Base/api/export/master?years=2022,2023,2024,2025" `
+Invoke-WebRequest -UseBasicParsing -Uri "$Global:Base/api/export/master?years=2022,2023,2024,2025" `
     -Headers @{ Authorization = "Bearer $token" } -OutFile $masterPath
 $size = (Get-Item $masterPath).Length
 Assert-True ($size -gt 10KB) "7a 总表导出 $size 字节"

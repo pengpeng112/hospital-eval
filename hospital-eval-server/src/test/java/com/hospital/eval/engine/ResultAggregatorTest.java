@@ -95,6 +95,23 @@ class ResultAggregatorTest {
         assertEquals(20.0, h.den());
     }
 
+    // 7. 纯手工指标 / 含手工行时即使 aggMode=DEDUP_DTL 也必须走各科累加（不得误算为 0/0）
+    @Test
+    void hospitalManualRowsSumInsteadOfDedupZero() {
+        HospitalPart deptA = new HospitalPart(1, 10L, false,
+                new ScopeExtract("MANUAL", false, false), false, false,
+                null, 3.0, null, null, 10.0, null, null, true);
+        HospitalPart deptB = new HospitalPart(2, 10L, false,
+                new ScopeExtract("MANUAL", false, false), false, false,
+                null, 5.0, null, null, 20.0, null, null, true);
+        List<HospitalPart> parts = List.of(deptA, deptB);
+        assertFalse(ResultAggregator.shouldMergeDedup("DEDUP_DTL", parts));
+        NumDen h = ResultAggregator.computeHospital("DEDUP_DTL", parts, null, null);
+        assertEquals(8.0, h.num());
+        assertEquals(30.0, h.den());
+        assertEquals("MANUAL", h.tag());
+    }
+
     private HospitalPart part(long scopeId, Set<String> numKeys, Set<String> denKeys) {
         return new HospitalPart(scopeId, -1, false,
                 new ScopeExtract("SYS", true, true), false, false,

@@ -1,4 +1,4 @@
-﻿﻿﻿# TASK-08 冒烟：章节树/指标列表/详情/修改留痕/科室实例/汇总/导出导入/同步科室编码
+﻿# TASK-08 冒烟：章节树/指标列表/详情/修改留痕/科室实例/汇总/导出导入/同步科室编码
 . "$PSScriptRoot\_common.ps1"
 
 $token = Login-Admin
@@ -51,7 +51,7 @@ Assert-True (@($summary.data).Count -ge 1) "6 func-dept-summary 返回 $(@($summ
 
 # 7. 导出 xlsx（存 $env:TEMP）> 5KB → 原样导入 errors 为空
 $exportPath = Join-Path $env:TEMP "scopes_task08_export.xlsx"
-Invoke-WebRequest -Uri "$Global:Base/api/scope/export" -Headers @{ Authorization = "Bearer $token" } `
+Invoke-WebRequest -UseBasicParsing -Uri "$Global:Base/api/scope/export" -Headers @{ Authorization = "Bearer $token" } `
     -OutFile $exportPath
 $size = (Get-Item $exportPath).Length
 Assert-True ($size -gt 5KB) "7a 导出文件 $size 字节 > 5KB"
@@ -69,16 +69,14 @@ $importBody = $importResp.Content.ReadAsStringAsync().Result | ConvertFrom-Json
 if ([int]$importResp.StatusCode -ne 200) { throw "import HTTP $($importResp.StatusCode)" }
 if ([int]$importBody.code -ne 0) { throw "import code=$($importBody.code) msg=$($importBody.msg)" }
 $errCount = @($importBody.data.errors).Count
-$contractErr = 0; $otherErr = 0
-foreach ($e in @($importBody.data.errors)) {
-    if ($e.message -match "查不到或重名") { $contractErr++ } else { $otherErr++ }
+$otherErr = @($importBody.data.errors | Where-Object { $_.message -notmatch "查不到或重名" }).Count
+Write-Host "7b 导入 updated=$($importBody.data.updated) errors=$errCount（其他错误=$otherErr）"
+if ($errCount -gt 0) {
+    $importBody.data.errors | Select-Object -First 5 | ForEach-Object {
+        Write-Host "  示例 row=$($_.row) $($_.message)"
+    }
 }
-Write-Host "7b 导入 updated=$($importBody.data.updated) errors=$errCount（契约错误行[查不到或重名]=$contractErr / 其他=$otherErr）"
-if ($contractErr -gt 0) {
-    $first = @($importBody.data.errors | Where-Object { $_.message -match "查不到或重名" }) | Select-Object -First 3
-    foreach ($e in $first) { Write-Host "  示例 row=$($e.row) $($e.message)" }
-}
-Assert-True (($errCount -eq $contractErr) -and $otherErr -eq 0) "7b 导入错误全部为契约要求的重名/查不到错误行"
+Assert-True ($errCount -eq 0) "7b 原样导出再导入 errors = 0"
 $client.Dispose()
 
 # 8. HIS_RO 同步科室编码（配置且连通才执行，否则 SKIP）
