@@ -123,5 +123,5 @@ mustChangePwd: False user.realName: 系统管理员 roles: ['ADMIN'] tokenLen: 3
 提交信息：`TASK-12: 前端骨架、登录与7大菜单布局`
 
 ```text
-（git log --oneline -n 1 结果，提交后由本 AI 回填至此）
+5c2d72f TASK-12: 前端骨架、登录与7大菜单布局
 ```
