@@ -3,7 +3,7 @@
 - 执行 AI / 模型：ZCode / GLM-5.3-Flash（account:bigmodel-individual-coding-plan）
 - 开始 / 结束时间：2026-11-16 08:30 / 2026-11-16 09:20（Asia/Shanghai，含前一日 20:00 起的编码轮次）
 - 状态：已完成（病历调阅与跑批明细验证因 Oracle 白名单未放行按规则 SKIP）
-- Git 提交号：见文末（提交后回填）
+- Git 提交号：`207c4f6 TASK-10: 结果汇总、明细、病历调阅与总表导出接口`（任务交付内容提交，含本回执；本行由紧随其后的一次仅回执小提交入库）
 - 基线：HEAD = 935fe13（TASK-09），metric/algo/engine 实体 Mapper 直接复用
 
 ## 一、前置检查结果
