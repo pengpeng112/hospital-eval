@@ -57,3 +57,16 @@ SMOKE TASK_07 DONE
 ```text
 5a88e4f TASK-18: 前置检查未通过停止回执（Oracle 白名单未放行）
 ```
+
+## 六、后续进展（2026-11-17，用户显式授权后由执行 AI 代办）
+
+用户明确要求代为执行补救路径 1（SSH 隧道 + 调整 .env），已按以下步骤完成并验证：
+
+1. **SSH 别名核实**：`data-asset-83` 实指 **10.10.8.83**（数据资产 8.83 容器宿主，配置 `F:\python\数据资产\.ssh\config_ai`；TASK_18.md 中"10.10.8.74"为笔误，8.74 是 DBOPER 前置机）；从 8.83 实测两个 Oracle 监听均可达（/dev/tcp 探测 HIS/ODS 均 REACHABLE）。
+2. **持久隧道**：独立 ssh 进程（ServerAliveInterval=30 保活）本机端口映射 **11521 → 10.10.10.15:1521（HIS）**、**11522 → 10.10.8.216:1521（ODS）**，双端口 TCP 连通验证通过。隧道进程随系统重启失效，重启后需重发：
+   `ssh -F F:\python\数据资产\.ssh\config_ai -N -L 11521:10.10.10.15:1521 -L 11522:10.10.8.216:1521 -o ServerAliveInterval=30 data-asset-83`
+3. **.env 调整**（用户授权代改，仅改两行 JDBC URL，未读取/打印任何凭据，文件不入 Git）：
+   - `HIS_RO_JDBC_URL=jdbc:oracle:thin:@//host.docker.internal:11521/his`
+   - `ODS_RO_JDBC_URL=jdbc:oracle:thin:@//host.docker.internal:11522/orcl`
+   （后端在容器内，经宿主网关 host.docker.internal 访问隧道端口）
+4. **验证**：eval-server 重建加载新配置后，`TASK_06.ps1` 冒烟 **ODS_RO ping 连通 (504ms) + trial 成功、HIS_RO ping 连通 (158ms) + trial 成功**——TASK-18 前置检查的"两源 ping ok=true"条件已满足，可重新投喂执行。
