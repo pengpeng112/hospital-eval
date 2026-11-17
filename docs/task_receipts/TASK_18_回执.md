@@ -55,5 +55,5 @@ SMOKE TASK_07 DONE
 提交信息：`TASK-18: 前置检查未通过停止回执（Oracle 白名单未放行）`
 
 ```text
-（提交后回填）
+5a88e4f TASK-18: 前置检查未通过停止回执（Oracle 白名单未放行）
 ```
