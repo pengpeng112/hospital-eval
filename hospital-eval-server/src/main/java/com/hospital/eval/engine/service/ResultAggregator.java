@@ -289,7 +289,9 @@ public class ResultAggregator {
                 Set<Integer> years = new TreeSet<>();
                 for (TaskOutcome o : se.getValue()) {
                     if (o.sqlRole() != null) {
-                        byRole.computeIfAbsent(o.sqlRole(), k -> new ArrayList<>()).add(o);
+                        // TASK-18 修复：SqlExecutor 产出原始角色 NUM_SUM/DEN_SUM/NUM_DTL/DEN_DTL，
+                        // 聚合按 NUM/DEN 前缀归一（此前精确键 get("NUM") 永不命中，真跑 Oracle 科室行值全部丢失）
+                        byRole.computeIfAbsent(rolePrefix(o.sqlRole()), k -> new ArrayList<>()).add(o);
                     }
                     if (o.sumByYear() != null) {
                         years.addAll(o.sumByYear().keySet());
@@ -473,6 +475,14 @@ public class ResultAggregator {
             }
         }
         return new ScopeExtract(mode, hasNum, hasDen);
+    }
+
+    /** TASK-18 修复配套：原始 SQL 角色（NUM_SUM/NUM_DTL/DEN_SUM/DEN_DTL）归一为 NUM/DEN 前缀。 */
+    private static String rolePrefix(String sqlRole) {
+        if (sqlRole == null) {
+            return null;
+        }
+        return sqlRole.startsWith("DEN") ? "DEN" : "NUM";
     }
 
     private RoleOutcome roleOutcome(List<TaskOutcome> outs, String prefix, int year,
