@@ -43,5 +43,5 @@ type "$env:USERPROFILE\.ssh\id_ed25519_eval75.pub" | ssh root@10.10.8.75 "mkdir 
 提交信息：`TASK-19: 前置检查未通过停止回执（待用户配置SSH免密）`
 
 ```text
-（提交后回填）
+b945837 TASK-19: 前置检查未通过停止回执（待用户配置SSH免密）
 ```
