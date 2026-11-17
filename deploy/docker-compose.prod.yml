@@ -1,0 +1,35 @@
+name: hospital-eval
+services:
+  eval-postgres:
+    image: postgres:15
+    container_name: eval-postgres
+    restart: unless-stopped
+    env_file: .env
+    environment: { TZ: Asia/Shanghai }
+    ports: ["127.0.0.1:${EVAL_PG_PORT}:5432"]
+    volumes:
+      - /opt/hospital-eval/data/postgres:/var/lib/postgresql/data
+      - /opt/hospital-eval/sql_init:/docker-entrypoint-initdb.d:ro
+  eval-kkfileview:
+    image: keking/kkfileview:latest
+    container_name: eval-kkfileview
+    restart: unless-stopped
+    environment: { KK_TRUST_HOST: "*" }
+  eval-server:
+    image: hospital-eval-server:1.0.0
+    container_name: eval-server
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      EVAL_PG_HOST: eval-postgres
+      EVAL_PG_INNER_PORT: "5432"
+      EVAL_UPLOAD_DIR: /data/uploads
+      EVAL_PREVIEW_FILE_BASE_URL: http://eval-server:48080
+    volumes: ["/opt/hospital-eval/data/uploads:/data/uploads"]
+    depends_on: [eval-postgres]
+  eval-web:
+    image: hospital-eval-web:1.0.0
+    container_name: eval-web
+    restart: unless-stopped
+    ports: ["${EVAL_WEB_PORT}:80"]
+    depends_on: [eval-server, eval-kkfileview]
